@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard | ST Lasers</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <script src="firebase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
 
@@ -66,11 +70,12 @@
         }
 
         .page {
-            width: min(1080px, calc(100vw - 80px));
+            width: min(1180px, calc(100vw - 48px));
+            padding-bottom: 48px;
         }
 
         .welcome {
-            font-size: 42px;
+            font-size: 34px;
             font-weight: 800;
             margin: 0;
             text-align: center;
@@ -84,43 +89,87 @@
             margin: 14px 0 28px;
         }
 
-        .grid {
+        .summary-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 18px;
+            margin-bottom: 20px;
         }
 
-        .card {
+        .summary, .chart-panel, .link-card {
             background: var(--panel);
             padding: 24px;
-            border-radius: 24px;
+            border-radius: 12px;
             border: 1px solid rgba(124, 58, 237, 0.18);
             box-shadow: 0 12px 40px rgba(2, 6, 23, 0.16);
         }
 
-        .card h3 {
-            margin: 0;
-            font-size: 20px;
-        }
-
-        .card p {
+        .summary-label, .chart-kicker {
             color: var(--muted);
-            margin: 8px 0 18px;
-            font-size: 14px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
         }
 
-        .card a {
-            display: inline-block;
-            text-decoration: none;
-            padding: 12px 18px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
-            color: white;
+        .summary-value {
+            margin-top: 9px;
+            font-size: 27px;
             font-weight: 700;
         }
 
-        @media (max-width: 700px) {
-            .grid { grid-template-columns: 1fr; }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+            gap: 18px;
+        }
+
+        .chart-panel { min-width: 0; }
+        .chart-heading { margin: 0 0 5px; font-size: 17px; }
+        .chart-description { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
+        .chart-wrap { height: 270px; position: relative; }
+        .chart-empty { display: none; color: var(--muted); font-size: 13px; padding: 24px 0; }
+
+        .link-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 20px;
+        }
+
+        .link-card { padding: 18px; }
+        .link-card h3 { margin: 0 0 7px; font-size: 16px; }
+        .link-card p { min-height: 38px; color: var(--muted); margin: 0 0 15px; font-size: 12px; }
+        .link-card a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            padding: 9px 13px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 800px) {
+            .chart-grid { grid-template-columns: 1fr; }
+            .link-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 600px) {
+            body { padding-top: 105px; }
+            .navbar { width: calc(100% - 20px); gap: 2px; padding: 8px 4px; overflow-x: auto; justify-content: flex-start; }
+            .navbar a { padding: 9px 10px; font-size: 12px; white-space: nowrap; }
+            .page { width: calc(100vw - 28px); }
+            .welcome { font-size: 28px; }
+            .subtitle { font-size: 13px; }
+            .summary-grid { grid-template-columns: 1fr; gap: 10px; }
+            .summary { padding: 16px; }
+            .summary-value { font-size: 22px; }
+            .chart-panel { padding: 16px; }
+            .chart-wrap { height: 230px; }
+            .link-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -136,35 +185,110 @@
         <a href="companydetails.html">Clients</a>
         <a href="billing.html">Billing</a>
         <a href="dashboard.html" style="background:var(--accent); color:black;">Dashboard</a>
+        <a href="inventory.html">Inventory</a>
         <a href="history.html">History</a>
     </nav>
 
     <div class="page">
         <h1 class="welcome">DASHBOARD</h1>
-        <div class="subtitle">Manage your billing workspace from one place.</div>
+        <div class="subtitle">A live view of billing activity and inventory.</div>
 
-        <div class="grid">
-            <div class="card">
-                <h3>Clients</h3>
-                <p>View and manage customer details for billing operations.</p>
-                <a href="companydetails.html">Open Clients</a>
+        <section class="summary-grid" aria-label="Billing summary">
+            <div class="summary"><div class="summary-label">Total revenue</div><div class="summary-value" id="totalRevenue">₹ 0.00</div></div>
+            <div class="summary"><div class="summary-label">Invoices recorded</div><div class="summary-value" id="invoiceCount">0</div></div>
+            <div class="summary"><div class="summary-label">Inventory items</div><div class="summary-value" id="inventoryCount">0</div></div>
+        </section>
+
+        <section class="chart-grid" aria-label="Billing charts">
+            <div class="chart-panel">
+                <h2 class="chart-heading">Monthly revenue</h2>
+                <p class="chart-description">Invoice totals by month</p>
+                <div class="chart-wrap"><canvas id="revenueChart" aria-label="Monthly revenue bar chart"></canvas><div class="chart-empty" id="revenueEmpty">No invoice data available yet.</div></div>
             </div>
-            <div class="card">
-                <h3>Billing</h3>
-                <p>Create invoices and save them securely to the cloud.</p>
-                <a href="billing.html">Open Billing</a>
+            <div class="chart-panel">
+                <h2 class="chart-heading">Revenue by customer</h2>
+                <p class="chart-description">Share of billed revenue</p>
+                <div class="chart-wrap"><canvas id="customerChart" aria-label="Revenue by customer pie chart"></canvas><div class="chart-empty" id="customerEmpty">Customer totals will appear when invoices are recorded.</div></div>
             </div>
-            <div class="card">
-                <h3>History</h3>
-                <p>Review saved billing records and download invoice details.</p>
-                <a href="history.html">Open History</a>
-            </div>
-            <div class="card">
-                <h3>Logout</h3>
-                <p>End your current session and return to the login page.</p>
-                <a href="login.html" onclick="localStorage.removeItem('st_lasers_loggedin'); localStorage.removeItem('st_lasers_currentUser');">Logout</a>
-            </div>
-        </div>
+        </section>
+
+        <section class="link-grid" aria-label="Workspace pages">
+            <div class="link-card"><h3>Clients</h3><p>View and manage customer details.</p><a href="companydetails.html">Open clients</a></div>
+            <div class="link-card"><h3>Billing</h3><p>Create and save customer invoices.</p><a href="billing.html">Open billing</a></div>
+            <div class="link-card"><h3>Inventory</h3><p>Track stock levels and product details.</p><a href="inventory.html">Open inventory</a></div>
+            <div class="link-card"><h3>History</h3><p>Review saved billing records.</p><a href="history.html">Open history</a></div>
+        </section>
     </div>
+    <script>
+        const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
+        const chartColors = ['#f59e0b', '#38bdf8', '#34d399', '#fb7185', '#a78bfa', '#f97316'];
+
+        function renderCharts(invoices) {
+            const monthlyRevenue = new Map();
+            const customerRevenue = new Map();
+            let revenue = 0;
+
+            invoices.forEach((invoice) => {
+                const amount = Number(invoice.grand_total) || Number(invoice.all_data && invoice.all_data.grandTotal) || 0;
+                const date = new Date(invoice.bill_date || (invoice.all_data && invoice.all_data.date));
+                const month = Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString('en', { month: 'short', year: '2-digit' });
+                const customer = invoice.customer_name || (invoice.all_data && invoice.all_data.customer) || 'Unspecified customer';
+                revenue += amount;
+                monthlyRevenue.set(month, (monthlyRevenue.get(month) || 0) + amount);
+                customerRevenue.set(customer, (customerRevenue.get(customer) || 0) + amount);
+            });
+
+            document.getElementById('totalRevenue').textContent = currency.format(revenue);
+            document.getElementById('invoiceCount').textContent = invoices.length.toLocaleString();
+
+            const sortedMonths = [...monthlyRevenue.entries()].sort((left, right) => left[0] === 'Unknown' ? 1 : right[0] === 'Unknown' ? -1 : new Date(`1 ${left[0]}`) - new Date(`1 ${right[0]}`));
+            const customerEntries = [...customerRevenue.entries()].sort((left, right) => right[1] - left[1]);
+            const noInvoices = invoices.length === 0;
+
+            if (noInvoices) {
+                document.getElementById('revenueChart').style.display = 'none';
+                document.getElementById('customerChart').style.display = 'none';
+                document.getElementById('revenueEmpty').style.display = 'block';
+                document.getElementById('customerEmpty').style.display = 'block';
+                return;
+            }
+
+            new Chart(document.getElementById('revenueChart'), {
+                type: 'bar',
+                data: { labels: sortedMonths.map(([month]) => month), datasets: [{ data: sortedMonths.map(([, amount]) => amount), backgroundColor: '#38bdf8', borderRadius: 5, maxBarThickness: 44 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (context) => currency.format(context.raw) } } }, scales: { x: { grid: { display: false }, ticks: { color: '#cbd5e1' } }, y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,.14)' }, ticks: { color: '#94a3b8', callback: (value) => currency.format(value) } } } }
+            });
+
+            new Chart(document.getElementById('customerChart'), {
+                type: 'pie',
+                data: { labels: customerEntries.map(([customer]) => customer), datasets: [{ data: customerEntries.map(([, amount]) => amount), backgroundColor: customerEntries.map((_, index) => chartColors[index % chartColors.length]), borderColor: '#0b1120', borderWidth: 3 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', padding: 14, boxWidth: 10 } }, tooltip: { callbacks: { label: (context) => `${context.label}: ${currency.format(context.raw)}` } } } }
+            });
+        }
+
+        async function loadDashboard() {
+            const [invoiceResult, inventoryResult] = await Promise.allSettled([
+                window._firebase.getInvoices(),
+                window._firebase.getInventory()
+            ]);
+
+            if (invoiceResult.status === 'fulfilled') {
+                renderCharts(invoiceResult.value || []);
+            } else {
+                document.getElementById('revenueEmpty').textContent = 'Unable to load billing data. Check your connection and try again.';
+                document.getElementById('customerEmpty').textContent = 'Unable to load billing data. Check your connection and try again.';
+                document.getElementById('revenueEmpty').style.display = 'block';
+                document.getElementById('customerEmpty').style.display = 'block';
+                document.getElementById('revenueChart').style.display = 'none';
+                document.getElementById('customerChart').style.display = 'none';
+            }
+
+            document.getElementById('inventoryCount').textContent = inventoryResult.status === 'fulfilled'
+                ? inventoryResult.value.length.toLocaleString()
+                : '—';
+        }
+
+        loadDashboard();
+    </script>
 </body>
 </html>

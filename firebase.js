@@ -17,6 +17,7 @@ if (!window.firebase || !window.firebase.initializeApp) {
 } else {
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+  const inventoryCollection = db.collection('inventory');
 
   window._firebase = {
     db,
@@ -50,6 +51,59 @@ if (!window.firebase || !window.firebase.initializeApp) {
     // Delete invoice document by id
     deleteInvoice: async function(id) {
       await db.collection('invoices').doc(id).delete();
+    },
+
+    getInventory: async function() {
+      const snapshot = await inventoryCollection.get();
+      return snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));
+    },
+
+    initializeInventory: async function(products) {
+      const existing = await inventoryCollection.limit(1).get();
+      if (!existing.empty || !products.length) return false;
+
+      const batch = db.batch();
+      products.forEach(product => {
+        const document = product.id && !product.id.includes('/')
+          ? inventoryCollection.doc(product.id)
+          : inventoryCollection.doc();
+        batch.set(document, {
+          name: product.name || '',
+          sku: product.sku || '',
+          category: product.category || '',
+          quantity: Number(product.quantity) || 0,
+          price: Number(product.price) || 0,
+          reorderLevel: Number(product.reorderLevel) || 0,
+          is_sample: Boolean(product.is_sample || product.isSample),
+          created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          updated_at: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      await batch.commit();
+      return true;
+    },
+
+    addInventoryProduct: async function(product) {
+      const document = await inventoryCollection.add({
+        ...product,
+        is_sample: false,
+        created_at: firebase.firestore.FieldValue.serverTimestamp(),
+        updated_at: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      return document.id;
+    },
+
+    updateInventoryProduct: async function(id, product) {
+      await inventoryCollection.doc(id).set({
+        ...product,
+        updated_at: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    },
+
+    deleteInventoryProduct: async function(id) {
+      await inventoryCollection.doc(id).delete();
     }
   };
 }
